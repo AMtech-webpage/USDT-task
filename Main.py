@@ -2,7 +2,8 @@ import sqlite3
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
-import urllib.parse
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # =====================================================================
 # ⚙️ SYSTEM CONFIGURATION - ENTERPRISE METRICS
@@ -10,14 +11,15 @@ import urllib.parse
 BOT_TOKEN = "8366284497:AAGqy2V6Mh5HI_GmNn15kh_bm0-x2BzplQw"              # Your Live BotToken
 TG_CHANNEL = "@legitupdateontelegram"            # Enforced Verification Channel
 WA_CHANNEL_LINK = "https://whatsapp.com/channel/0029VbDKfJQHFxPAOJsTfE3y" 
+YT_CHANNEL_LINK = "https://www.youtube.com/@beaconofslam"
 
-# Manual Payout Routing Target (Admin WhatsApp)
-WHATSAPP_PAYOUT_NUMBER = "+2349034070745"
+# Secure Target Group Link ID for Internal Payout Ledger Clearing
+ADMIN_GROUP_CHAT_ID = -1002345869042  # Internal Routing Group Mapping
 
 # Platform Reward Valuations (USD Tiers)
 MIN_WITHDRAWAL = 2.0  
 REFERRAL_REWARD = 0.2 
-TASK_REWARD = 0.1     
+TASK_REWARD = 0.10     # This is now manually handled via Admin approval
 
 # Wallet Ecosystem Settings
 RECOMMENDED_WALLET = "Trust Wallet"
@@ -27,7 +29,6 @@ WALLET_DOWNLOAD_LINK = "https://trustwallet.com/download"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 def init_db():
-    """Initializes the secure SQL relational ledger structure locally on device."""
     db_path = os.path.join(os.getcwd(), "earning_platform.db")
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -43,13 +44,24 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Start the database engine immediately on run
 init_db()
+
+# --- CLOUD ALIVE KEEPER (HTTP SERVER FOR RENDER HEALTH CHECKS) ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"EXTREME ENGINE RUNNING LIVE")
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
 
 # --- BACKEND PIPELINE ENGINE UTILITIES ---
 
 def check_tg_membership(user_id):
-    """Queries Telegram server clusters to verify authentic channel membership status."""
     try:
         member = bot.get_chat_member(TG_CHANNEL, user_id)
         return member.status in ['creator', 'administrator', 'member']
@@ -57,7 +69,6 @@ def check_tg_membership(user_id):
         return False
 
 def render_dashboard_ui(user_id):
-    """Compiles the dynamic front-facing user profile and menu navigation architecture."""
     conn = sqlite3.connect("earning_platform.db")
     c = conn.cursor()
     c.execute("SELECT balance, wallet_address FROM users WHERE user_id = ?", (user_id,))
@@ -115,19 +126,19 @@ def handle_incoming_user(message):
         conn.commit()
     conn.close()
 
-    # Subscription Gatekeeper Enforcement
     if not check_tg_membership(user_id):
         markup = InlineKeyboardMarkup(row_width=1)
         markup.add(
-            InlineKeyboardButton("📢 Join Official Telegram", url=f"https://t.me/{TG_CHANNEL.strip('@')}"),
-            InlineKeyboardButton("🟢 Join Official WhatsApp", url=WA_CHANNEL_LINK),
+            InlineKeyboardButton("📢 1. Join Official Telegram", url=f"https://t.me/{TG_CHANNEL.strip('@')}"),
+            InlineKeyboardButton("🔴 2. Subscribe To Our YouTube", url=YT_CHANNEL_LINK),
+            InlineKeyboardButton("🟢 3. Join Official WhatsApp", url=WA_CHANNEL_LINK),
             InlineKeyboardButton("🔄 Verify Membership Activation", callback_data="ui_verify_gate")
         )
         gate_msg = (
             "🔒 *ACCOUNT ACTIVATION REQUIRED*\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "To maintain a clean platform ecosystem, you must enter our distribution updates channels before working.\n\n"
-            "Please click both panels below to follow, then execute verification to unlock your account control board."
+            "To maintain a clean platform ecosystem, you must enter our configuration metrics channels before starting.\n\n"
+            "Please click all three panels above to join/subscribe, then execute verification to unlock your dashboard."
         )
         bot.send_message(user_id, gate_msg, reply_markup=markup, parse_mode="Markdown")
         return
@@ -164,35 +175,62 @@ def process_ui_interactions(call):
                 conn.commit()
             conn.close()
             
+            try: bot.answer_callback_query(call.id, "✅ Verification Passed!")
+            except Exception: pass
+                
             text, markup = render_dashboard_ui(user_id)
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="Markdown")
         else:
-            bot.answer_callback_query(call.id, "❌ Subscriptions Verification Dropped. Verify you are inside our Telegram channel structure.", show_alert=True)
+            try: bot.answer_callback_query(call.id, "❌ Join the channel first!", show_alert=True)
+            except Exception: pass
+            bot.send_message(user_id, "⚠️ *Access Denied:* Please join our verification channels above first.", parse_mode="Markdown")
 
     elif call.data == "ui_invite":
+        try: bot.answer_callback_query(call.id)
+        except Exception: pass
         bot_identity = bot.get_me()
         referral_link = f"https://t.me/{bot_identity.username}?start={user_id}"
         invite_msg = (
             "👥 *AFFILIATE ONBOARDING CORE*\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Acquire network balance rewards by processing user joins via your specific link format tracking metrics.\n\n"
-            f"💰 Invitation Reward: *${REFERRAL_REWARD:.2f} USD* upon gate clearance verification.\n\n"
+            f"💰 Invitation Reward: *${REFERRAL_REWARD:.2f} USD*\n\n"
             f"🔗 *Tracking Link Address:*\n`{referral_link}`"
         )
         bot.send_message(user_id, invite_msg, parse_mode="Markdown")
 
     elif call.data == "ui_task":
-        conn = sqlite3.connect("earning_platform.db")
-        c = conn.cursor()
-        c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (TASK_REWARD, user_id))
-        conn.commit()
-        conn.close()
-        bot.answer_callback_query(call.id, f"✅ Activity Task Cleared! +${TASK_REWARD:.2f} USD credited.", show_alert=True)
+        try: bot.answer_callback_query(call.id)
+        except Exception: pass
         
-        text, markup = render_dashboard_ui(user_id)
-        bot.send_message(user_id, text, reply_markup=markup, parse_mode="Markdown")
+        # 📋 NEW DYNAMIC TASK INTERFACE (No automatic crediting!)
+        task_markup = InlineKeyboardMarkup(row_width=1)
+        task_markup.add(
+            InlineKeyboardButton("📺 Open YouTube Video Task", url=YT_CHANNEL_LINK),
+            InlineKeyboardButton("📤 Submit Task Proof Screenshot", callback_data="ui_submit_proof")
+        )
+        
+        task_msg = (
+            "📋 *ACTIVE DAILY PLATFORM TASK*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 Task Reward Value: *${TASK_REWARD:.2f} USD*\n\n"
+            "*Instructions:*\n"
+            "1. Click the button below to watch our latest video.\n"
+            "2. Leave an authentic Like and Subscribe to the channel.\n"
+            "3. Take a screenshot showing your active subscription status.\n"
+            "4. Click **Submit Task Proof Screenshot** below to upload your file to the admin team."
+        )
+        bot.send_message(user_id, task_msg, reply_markup=task_markup, parse_mode="Markdown")
+
+    elif call.data == "ui_submit_proof":
+        try: bot.answer_callback_query(call.id)
+        except Exception: pass
+        
+        prompt = bot.send_message(user_id, "📸 *PROOF SUBMISSION MODULE*\n\nPlease upload and send the image screenshot showing your complete video task completion proof now:", parse_mode="Markdown")
+        bot.register_next_step_handler(prompt, forward_task_proof_to_admin)
 
     elif call.data == "ui_wallet":
+        try: bot.answer_callback_query(call.id)
+        except Exception: pass
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
         c.execute("SELECT wallet_address FROM users WHERE user_id = ?", (user_id,))
@@ -204,26 +242,116 @@ def process_ui_interactions(call):
             "⚙️ *SETTLEMENT WALLET MATRIX*\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"Current Routing Target: `{wallet_display}`\n\n"
-            "⚡ *HIGH SPEED HIGH PROCESSING RECOMMENDATION:*\n"
-            f"We strongly suggest using **{RECOMMENDED_WALLET}** to receive funds. Due to instant ledger visibility, Trust Wallet allocations complete processing significantly faster with absolute security control panels.\n\n"
-            "⚠️ Notice: DO NOT apply exchange deposit strings (e.g., direct custodial addresses from Binance app), as batch transactions might get dropped or cause extreme clearing holds.\n\n"
+            "⚡ *HIGH SPEED RUNNING PROCESS RECOMMENDATION:*\n"
+            f"We strongly suggest using **{RECOMMENDED_WALLET}** to receive funds instantly.\n\n"
             f"📥 [Download Trust Wallet App officially here]({WALLET_DOWNLOAD_LINK})\n\n"
-            "👉 *To update:* Reply directly to this system message with your active *BEP-20 (BSC) USDT* wallet string address:"
+            "👉 *To update:* Reply directly with your active *BEP-20 (BSC) USDT* address:"
         )
         prompt = bot.send_message(user_id, prompt_text, parse_mode="Markdown", disable_web_page_preview=True)
         bot.register_next_step_handler(prompt, save_wallet_routing)
 
     elif call.data == "ui_withdraw":
+        try: bot.answer_callback_query(call.id)
+        except Exception: pass
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
         c.execute("SELECT balance, wallet_address FROM users WHERE user_id = ?", (user_id,))
         balance, wallet = c.fetchone()
-        conn.close()
         
         if not wallet:
-            bot.answer_callback_query(call.id, "❌ Action Required: You must link a payout address via 'Set Wallet' menu first.", show_alert=True)
-        elif balance < MIN_WITHDRAWAL:
-            bot.answer_callback_query(call.id, f"❌ Payout Threshold Insufficient: Minimum target benchmark limit is ${MIN_WITHDRAWAL:.2f} USD.", show_alert=True)
+            conn.close()
+            bot.send_message(user_id, "❌ *Action Required:* Link a wallet address first.", parse_mode="Markdown")
+            return
+            
+        if balance < MIN_WITHDRAWAL:
+            conn.close()
+            bot.send_message(user_id, f"❌ Minimum withdrawal target limit is `${MIN_WITHDRAWAL:.2f} USD`.", parse_mode="Markdown")
+            return
+            
+        # Deduct ledger values completely inside the database block
+        c.execute("UPDATE users SET balance = 0.0 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        
+        # Dispatch instant clearing log metrics text straight to the Admin Verification Group
+        admin_invoice_msg = (
+            "⚡ *NEW TRANSACTION REQUEST SUBMITTED*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 User ID     : `{user_id}`\n"
+            f"💰 Value Tiers : `${balance:.2f} USD`\n"
+            f"💳 Destination : `{wallet}`\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚙️ Status: *Ledger balance zeroed out. Ready for manual payment distribution.*"
+        )
+        
+        try:
+            bot.send_message(ADMIN_GROUP_CHAT_ID, admin_invoice_msg, parse_mode="Markdown")
+        except Exception as e:
+            print(f"⚠️ Network error forwarding transaction: {e}")
+            
+        # Send instant receipt warning confirmation instructions to the customer interface
+        client_receipt_card = (
+            "✅ *WITHDRAWAL INVOICE SUBMITTED FOR REVIEW*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Liquidation Value Recieved : `${balance:.2f} USD`\n"
+            f"Target Destination Wallet  : `{wallet}`\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⏳ *PROCESSING TIMELINE WINDOW:*\n"
+            f"• If you utilized **{RECOMMENDED_WALLET}**, your settlement balance will be credited within **1 Hour**!\n\n"
+            "• If you utilized any external exchange wallet address, accounting checks will extend completion to **3 Days**."
+        )
+        bot.send_message(user_id, client_receipt_card, parse_mode="Markdown")
+
+def forward_task_proof_to_admin(message):
+    user_id = message.from_user.id
+    
+    # Verify if user actually sent a photo proof
+    if not message.photo:
+        bot.send_message(user_id, "❌ *Submission Rejected:* You must upload an actual screenshot image file as proof. Process canceled.")
+        return
+        
+    # Grab the highest resolution file ID
+    file_id = message.photo[-1].file_id
+    
+    admin_proof_caption = (
+        "📸 *NEW USER TASK SUBMISSION*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 Account User ID: `{user_id}`\n"
+        f"💰 Target Reward   : `${TASK_REWARD:.2f} USD`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Review the image screenshot. If valid, you can run an admin command or credit their database entry manually."
+    )
+    
+    try:
+        # Forwards the proof image straight to your private tracking group channel
+        bot.send_photo(ADMIN_GROUP_CHAT_ID, file_id, caption=admin_proof_caption, parse_mode="Markdown")
+        bot.send_message(user_id, "🚀 *PROOF RECEIVED SUCCESSFUL*\n\nYour assignment screenshot has been securely dispatched to the auditing review group channels. Your balance metrics will be adjusted once verified!", parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(user_id, "⚠️ System connectivity drop. Please try again later.")
+        print(f"Proof routing error: {e}")
+
+def save_wallet_routing(message):
+    user_id = message.from_user.id
+    input_address = message.text.strip() if message.text else ""
+    
+    if not input_address.startswith("0x") or len(input_address) < 40:
+        bot.send_message(user_id, "❌ *INPUT ROUTING REJECTED*")
+        return
+        
+    conn = sqlite3.connect("earning_platform.db")
+    c = conn.cursor()
+    c.execute("UPDATE users SET wallet_address = ? WHERE user_id = ?", (input_address, user_id))
+    conn.commit()
+    conn.close()
+    bot.send_message(user_id, f"✅ Wallet linked:\n`{input_address}`", parse_mode="Markdown")
+
+if __name__ == "__main__":
+    threading.Thread(target=run_health_server, daemon=True).start()
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("🚀 EXTREME ENGINE SYSTEM LIVE WITH INTERNAL ACCOUNTING")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    bot.infinity_polling()
+d, f"❌ Payout Threshold Insufficient: Minimum target benchmark limit is ${MIN_WITHDRAWAL:.2f} USD.", show_alert=True)
         else:
             # 📝 Generate clean text parameters for the WhatsApp URL string
             raw_text = (
