@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # --- CONFIGURATION ---
 # Updated with your new revoked token
-BOT_TOKEN = "8366284497:AAHPIq52by3eYTLF5OY_47VFK_SGEYa7wj8-"
+BOT_TOKEN = "8366284497:AAHPIq52by3eYTLF5OY_47VFK_SGEYa7wj8"
 ADMIN_GROUP = "@USDTsettlemente"
 MIN_WITHDRAWAL = 2.0
 
