@@ -2,7 +2,6 @@ import sqlite3
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
-import random
 import time
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -15,7 +14,7 @@ TG_CHANNEL = "@legitupdateontelegram"            # Enforced Verification Channel
 WA_CHANNEL_LINK = "https://whatsapp.com/channel/0029VbDKfJQHFxPAOJsTfE3y" 
 YT_CHANNEL_LINK = "https://www.youtube.com/@beaconofslam"
 
-# 🎯 WITHDRAWAL DESTINATION CHANNEL (Ensure bot is an Admin here!)
+# 🎯 WITHDRAWAL DESTINATION CHANNEL (Bot must be an Admin here!)
 ADMIN_GROUP_CHAT_ID = "@USDTsettlemente"  
 
 # Platform Reward Valuations (USD Tiers)
@@ -37,8 +36,6 @@ VIDEO_TASKS = [
 # =====================================================================
 
 bot = telebot.TeleBot(BOT_TOKEN)
-
-# Hidden runtime dictionary to keep track of user watch time and clicks
 user_watch_tracker = {}
 
 def init_db():
@@ -57,8 +54,6 @@ def init_db():
     """)
     conn.commit()
     conn.close()
-
-init_db()
 
 # --- CLOUD ALIVE KEEPER (HTTP SERVER FOR RENDER HEALTH CHECKS) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -82,15 +77,27 @@ def check_tg_membership(user_id):
     except Exception:
         return False
 
-def render_dashboard_ui(user_id):
+def get_user_data(user_id):
+    """Safely retrieves user data. Bulletproof against NoneType subscript errors."""
     conn = sqlite3.connect("earning_platform.db")
     c = conn.cursor()
-    c.execute("SELECT balance, wallet_address FROM users WHERE user_id = ?", (user_id,))
-    user_profile = c.fetchone()
-    conn.close()
+    c.execute("SELECT balance, wallet_address, promo_used FROM users WHERE user_id = ?", (user_id,))
+    row = c.fetchone()
     
-    balance = user_profile[0] if user_profile else 0.0
-    raw_wallet = user_profile[1] if user_profile else None
+    if row is None:
+        c.execute("INSERT OR IGNORE INTO users (user_id, balance, wallet_address, promo_used) VALUES (?, 0.0, NULL, 0)", (user_id,))
+        conn.commit()
+        conn.close()
+        return 0.0, None, 0
+        
+    conn.close()
+    balance = row[0] if row[0] is not None else 0.0
+    wallet = row[1]
+    promo_used = row[2] if row[2] is not None else 0
+    return balance, wallet, promo_used
+
+def render_dashboard_ui(user_id):
+    balance, raw_wallet, _ = get_user_data(user_id)
     
     if raw_wallet and len(str(raw_wallet)) > 15:
         wallet_display = f"{raw_wallet[:6]}...{raw_wallet[-6:]}"
@@ -236,7 +243,6 @@ def process_ui_interactions(call):
     elif call.data == "task_hifami_start":
         try: bot.answer_callback_query(call.id)
         except Exception: pass
-        
         user_watch_tracker[f"{user_id}_hifami"] = {"start_time": time.time()}
         
         markup = InlineKeyboardMarkup(row_width=1)
@@ -255,14 +261,12 @@ def process_ui_interactions(call):
             return
             
         elapsed = time.time() - user_watch_tracker[track_key]["start_time"]
-        
         if elapsed < 120.0:
             try: bot.answer_callback_query(call.id, "⚠️ Verification Pending: System checks indicate task steps are still processing. Please try again shortly.", show_alert=True)
             except Exception: pass
             return
             
         user_watch_tracker.pop(track_key, None)
-        
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
         c.execute("UPDATE users SET balance = balance + 0.30 WHERE user_id = ?", (user_id,))
@@ -271,7 +275,6 @@ def process_ui_interactions(call):
         
         try: bot.answer_callback_query(call.id, "🎉 Success! +$0.30 USD added.", show_alert=True)
         except Exception: pass
-        
         text, markup = render_dashboard_ui(user_id)
         bot.send_message(user_id, "✅ *HIFAMI TASK COMPLETED!*\nYour download matrix verified completely!", reply_markup=markup, parse_mode="Markdown")
 
@@ -279,7 +282,6 @@ def process_ui_interactions(call):
     elif call.data == "task_farm_start":
         try: bot.answer_callback_query(call.id)
         except Exception: pass
-        
         user_watch_tracker[f"{user_id}_farm"] = {"start_time": time.time()}
         
         markup = InlineKeyboardMarkup(row_width=1)
@@ -298,7 +300,6 @@ def process_ui_interactions(call):
             return
             
         user_watch_tracker.pop(track_key, None)
-        
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
         c.execute("UPDATE users SET balance = balance + 0.50 WHERE user_id = ?", (user_id,))
@@ -307,7 +308,6 @@ def process_ui_interactions(call):
         
         try: bot.answer_callback_query(call.id, "🎉 Success! +$0.50 USD added.", show_alert=True)
         except Exception: pass
-        
         text, markup = render_dashboard_ui(user_id)
         bot.send_message(user_id, "✅ *FARM TASK CREDITED!*\n+$0.50 USD added to your wallet.", reply_markup=markup, parse_mode="Markdown")
 
@@ -315,7 +315,6 @@ def process_ui_interactions(call):
     elif call.data == "task_loginapp_start":
         try: bot.answer_callback_query(call.id)
         except Exception: pass
-        
         user_watch_tracker[f"{user_id}_loginapp"] = {"start_time": time.time()}
         
         markup = InlineKeyboardMarkup(row_width=1)
@@ -334,7 +333,6 @@ def process_ui_interactions(call):
             return
             
         user_watch_tracker.pop(track_key, None)
-        
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
         c.execute("UPDATE users SET balance = balance + 0.40 WHERE user_id = ?", (user_id,))
@@ -343,7 +341,6 @@ def process_ui_interactions(call):
         
         try: bot.answer_callback_query(call.id, "🎉 Success! +$0.40 USD added.", show_alert=True)
         except Exception: pass
-        
         text, markup = render_dashboard_ui(user_id)
         bot.send_message(user_id, "✅ *LOGIN TASK CREDITED!*\n+$0.40 USD added to your balance.", reply_markup=markup, parse_mode="Markdown")
 
@@ -357,13 +354,11 @@ def process_ui_interactions(call):
         
         if matched_task:
             user_watch_tracker[f"{user_id}_{task_id}"] = {"start_time": time.time()}
-            
             markup = InlineKeyboardMarkup(row_width=1)
             markup.add(
                 InlineKeyboardButton("📺 Open Video Link & Subscribe Now", url=matched_task["url"]),
                 InlineKeyboardButton("🔄 Verify Video Task Completed", callback_data="task_yt_verify_" + task_id)
             )
-            
             task_run_text = f"🎬 *VIDEO TASK STARTED*\n━━━━━━━━━━━━━━━━━━━━━━━━\n1. Open link below.\n2. Watch for **at least {matched_task['time']} seconds**.\n3. Subscribe to the channel.\n4. Click verify when done."
             bot.send_message(user_id, task_run_text, reply_markup=markup, parse_mode="Markdown")
 
@@ -378,7 +373,6 @@ def process_ui_interactions(call):
             return
             
         elapsed_time = time.time() - user_watch_tracker[track_key]["start_time"]
-        
         if elapsed_time < float(matched_task["time"]):
             remaining = int(matched_task["time"] - elapsed_time)
             try: bot.answer_callback_query(call.id, f"⚠️ Access Denied: Watch for {matched_task['time']} seconds! ({remaining}s remaining)", show_alert=True)
@@ -386,7 +380,6 @@ def process_ui_interactions(call):
             return
             
         user_watch_tracker.pop(track_key, None)
-        
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
         c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (matched_task["reward"], user_id))
@@ -395,66 +388,100 @@ def process_ui_interactions(call):
         
         try: bot.answer_callback_query(call.id, f"🎉 Success! +${matched_task['reward']:.2f} USD added.", show_alert=True)
         except Exception: pass
-        
         text, markup = render_dashboard_ui(user_id)
         bot.send_message(user_id, f"✅ *TASK CREDITED SUCCESSFULLY*\n━━━━━━━━━━━━━━━━━━━━━━━━\nYour watch metrics verified perfectly! *+${matched_task['reward']:.2f} USD* has been added to your balance.", reply_markup=markup, parse_mode="Markdown")
 
+    # --- SET/VIEW PAYMENT WALLET MATRIX ---
     elif call.data == "ui_wallet":
         try: bot.answer_callback_query(call.id)
         except Exception: pass
-        conn = sqlite3.connect("earning_platform.db")
-        c = conn.cursor()
-        c.execute("SELECT wallet_address FROM users WHERE user_id = ?", (user_id,))
-        current_wallet = c.fetchone()[0]
-        conn.close()
         
-        wallet_display = current_wallet if current_wallet else "None Registered"
+        _, wallet, _ = get_user_data(user_id)
+        wallet_display = wallet if wallet else "None Registered"
+        
         prompt_text = f"⚙️ *SETTLEMENT WALLET MATRIX*\n━━━━━━━━━━━━━━━━━━━━━━━━\nCurrent Routing Target: `{wallet_display}`\n\n⚡ *RECOMMENDATION:*\nWe suggest using **{RECOMMENDED_WALLET}** to receive funds instantly.\n\n📥 [Download Trust Wallet officially here]({WALLET_DOWNLOAD_LINK})\n\n👉 *To update:* Reply with your active *BEP-20 (BSC) USDT* address or type a valid promo code:"
         prompt = bot.send_message(user_id, prompt_text, parse_mode="Markdown", disable_web_page_preview=True)
         bot.register_next_step_handler(prompt, save_wallet_or_promo)
 
+    # --- WITHDRAW MATRIX ---
     elif call.data == "ui_withdraw":
         try: bot.answer_callback_query(call.id)
         except Exception: pass
-        conn = sqlite3.connect("earning_platform.db")
-        c = conn.cursor()
-        c.execute("SELECT balance, wallet_address FROM users WHERE user_id = ?", (user_id,))
-        balance, wallet = c.fetchone()
         
-        if not wallet:
-            conn.close()
-            bot.send_message(user_id, "❌ *Action Required:* Link a wallet address first.", parse_mode="Markdown")
+        balance, wallet, _ = get_user_data(user_id)
+        
+        if not wallet or len(str(wallet).strip()) < 10:
+            bot.send_message(user_id, "❌ *Action Required:* Link a valid wallet address under 'Set/View Wallet' first.", parse_mode="Markdown")
             return
             
         if balance < MIN_WITHDRAWAL:
-            conn.close()
-            bot.send_message(user_id, f"❌ Minimum withdrawal target limit is `${MIN_WITHDRAWAL:.2f} USD`.", parse_mode="Markdown")
+            bot.send_message(user_id, f"❌ Minimum withdrawal target limit is `${MIN_WITHDRAWAL:.2f} USD`.\n\nYour current balance: `${balance:.2f} USD`", parse_mode="Markdown")
             return
             
+        # Deduct balance safely
+        conn = sqlite3.connect("earning_platform.db")
+        c = conn.cursor()
         c.execute("UPDATE users SET balance = 0.0 WHERE user_id = ?", (user_id,))
         conn.commit()
         conn.close()
         
+        # Format the payout information message explicitly for your channel
         admin_invoice_msg = f"⚡ *NEW TRANSACTION REQUEST SUBMITTED*\n━━━━━━━━━━━━━━━━━━━━━━━━\n👤 User ID     : `{user_id}`\n💰 Value Tiers : `${balance:.2f} USD`\n💳 Destination : `{wallet}`\n━━━━━━━━━━━━━━━━━━━━━━━━\n⚙️ Status: *Balance zeroed out. Ready for distribution.*"
         
         try:
             bot.send_message(ADMIN_GROUP_CHAT_ID, admin_invoice_msg, parse_mode="Markdown")
         except Exception as e:
-            print(f"⚠️ Network error forwarding transaction to settlement channel: {e}")
+            print(f"⚠️ Channel Forwarding Error: {e}")
             
-        client_receipt_card = f"✅ *WITHDRAWAL INVOICE SUBMITTED FOR REVIEW*\n━━━━━━━━━━━━━━━━━━━━━━━━\nLiquidation Value Recieved : `${balance:.2f} USD`\nTarget Destination Wallet  : `{wallet}`\n━━━━━━━━━━━━━━━━━━━━━━━━\n⏳ *PROCESSING TIMELINE WINDOW:*\n• Using **{RECOMMENDED_WALLET}** settles within **1 Hour**!\n• External exchange addresses extend to **3 Days**."
+        client_receipt_card = f"✅ *WITHDRAWAL INVOICE SUBMITTED FOR REVIEW*\n━━━━━━━━━━━━━━━━━━━━━━━━\nLiquidation Value Received : `${balance:.2f} USD`\nTarget Destination Wallet  : `{wallet}`\n━━━━━━━━━━━━━━━━━━━━━━━━\n⏳ *PROCESSING TIMELINE WINDOW:*\n• Using **{RECOMMENDED_WALLET}** settles within **1 Hour**!\n• External exchange addresses extend to **3 Days**."
         bot.send_message(user_id, client_receipt_card, parse_mode="Markdown")
 
 def save_wallet_or_promo(message):
     user_id = message.from_user.id
     input_text = message.text.strip() if message.text else ""
     
-    # Check for Promo Code entry first
+    if not input_text:
+        bot.send_message(user_id, "❌ Input cannot be empty. Matrix canceled.")
+        return
+
+    # Promo Code Handler
     if input_text.lower() == "muiz":
+        _, _, promo_used = get_user_data(user_id)
+        if promo_used == 1:
+            bot.send_message(user_id, "❌ *Promo code already claimed on this account!*")
+            return
+            
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
-        c.execute("SELECT promo_used FROM users WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
+        c.execute("UPDATE users SET balance = balance + ?, promo_used = 1 WHERE user_id = ?", (PROMO_REWARD, user_id))
+        conn.commit()
+        conn.close()
         
-        if row and row[0] == 1:
-            conn
+        text, markup = render_dashboard_ui(user_id)
+        bot.send_message(user_id, f"🎉 *PROMO CODE APPLIED!*\n━━━━━━━━━━━━━━━━━━━━━━━━\nCode `muiz` verified successfully. *+${PROMO_REWARD:.2f} USD* has been added to your balance!", reply_markup=markup, parse_mode="Markdown")
+        return
+
+    # Crypto Wallet String Validations
+    if len(input_text) < 25:
+        bot.send_message(user_id, "❌ *INVALID ROUTING OR PROMO CODE*\n\nPlease make sure you are inputting a valid wallet address or a correct promo code.")
+        return
+        
+    conn = sqlite3.connect("earning_platform.db")
+    c = conn.cursor()
+    c.execute("UPDATE users SET wallet_address = ? WHERE user_id = ?", (input_text, user_id))
+    conn.commit()
+    conn.close()
+    
+    text, markup = render_dashboard_ui(user_id)
+    bot.send_message(user_id, f"✅ *WALLET ROUTING TARGET REGISTERED*\n\nLinked address completely:\n`{input_text}`", reply_markup=markup, parse_mode="Markdown")
+
+if __name__ == "__main__":
+    init_db()
+    
+    print("🤖 Launching Cloud Alive Keeper Server...")
+    threading.Thread(target=run_health_server, daemon=True).start()
+    
+    time.sleep(1)
+    
+    print("🚀 Extreme Engine Polling Active.")
+    bot.infinity_polling()
