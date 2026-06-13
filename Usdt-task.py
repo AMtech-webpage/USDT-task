@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 # =====================================================================
 # ⚙️ SYSTEM CONFIGURATION - ENTERPRISE METRICS
 # =====================================================================
-BOT_TOKEN = "8366284497:AAGqy2V6Mh5HI_GmNn15kh_bm0-x2BzplQw"              # Your Live BotToken
+BOT_TOKEN = "8366284497:AAHPIq52by3eYTLF5OY_47VFK_SGEYa7wj8"              # Your Live BotToken
 TG_CHANNEL = "@legitupdateontelegram"            # Enforced Verification Channel
 WA_CHANNEL_LINK = "https://whatsapp.com/channel/0029VbDKfJQHFxPAOJsTfE3y" 
 YT_CHANNEL_LINK = "https://www.youtube.com/@beaconofslam"
