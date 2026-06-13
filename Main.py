@@ -32,7 +32,7 @@ VIDEO_TASKS = [
     "https://youtube.com/shorts/3uDPXXJbfr8?si=z6fWdUhxeMRuthuw",
     "https://youtube.com/shorts/tWLKPUv5vUw?si=0kMIO-fRL69X1m2X",
     "https://youtube.com/shorts/JfinwV1CFuc?si=j52Y6BsYACCMwUmS",
-    "https://youtube.com/shorts/sT93F-rFmzY?si=0SGMd7tbpgX0fmob"
+    "https://youtube.com/shorts/sT93F-rFmob"
 ]
 # =====================================================================
 
@@ -223,7 +223,6 @@ def process_ui_interactions(call):
         try: bot.answer_callback_query(call.id)
         except Exception: pass
         
-        # Step 1: Tell them a task is found, and make them click an internal button to start the timer!
         step1_markup = InlineKeyboardMarkup()
         step1_markup.add(InlineKeyboardButton("➡️ Proceed to Video Task", callback_data="execute_video_launch"))
         
@@ -241,7 +240,6 @@ def process_ui_interactions(call):
         try: bot.answer_callback_query(call.id)
         except Exception: pass
         
-        # Step 2: The exact millisecond they tap this, we lock in their true start time!
         selected_video_url = random.choice(VIDEO_TASKS)
         user_watch_tracker[user_id] = {"start_time": time.time(), "clicked": True}
         
@@ -262,7 +260,6 @@ def process_ui_interactions(call):
         bot.send_message(user_id, task_msg, reply_markup=task_markup, parse_mode="Markdown")
 
     elif call.data == "ui_verify_watch_time":
-        # Check if they even launched step 2
         if user_id not in user_watch_tracker:
             try: bot.answer_callback_query(call.id, "❌ Click 'Proceed to Video Task' first!", show_alert=True)
             except Exception: pass
@@ -270,7 +267,6 @@ def process_ui_interactions(call):
             
         elapsed_time = time.time() - user_watch_tracker[user_id]["start_time"]
         
-        # ⏱️ SECURITY CHECK: Has 15 seconds passed since they loaded the link?
         if elapsed_time < 15.0:
             remaining = int(15 - elapsed_time)
             try: 
@@ -279,10 +275,86 @@ def process_ui_interactions(call):
                 pass
             return
             
-        # Success! Clear their tracking state
         user_watch_tracker.pop(user_id, None)
         
-        # Credit database
         conn = sqlite3.connect("earning_platform.db")
         c = conn.cursor()
-        c.execute("UPDATE users SET balance = balance
+        c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (TASK_REWARD, user_id))
+        conn.commit()
+        conn.close()
+        
+        try: bot.answer_callback_query(call.id, f"🎉 Success! +${TASK_REWARD:.2f} USD added.", show_alert=True)
+        except Exception: pass
+        
+        text, markup = render_dashboard_ui(user_id)
+        bot.send_message(user_id, f"✅ *TASK CREDITED SUCCESSFULLY*\n━━━━━━━━━━━━━━━━━━━━━━━━\nYour watch metrics verified perfectly! *+${TASK_REWARD:.2f} USD* has been added to your balance. Make sure you stay subscribed!", parse_mode="Markdown")
+        bot.send_message(user_id, text, reply_markup=markup, parse_mode="Markdown")
+
+    elif call.data == "ui_wallet":
+        try: bot.answer_callback_query(call.id)
+        except Exception: pass
+        conn = sqlite3.connect("earning_platform.db")
+        c = conn.cursor()
+        c.execute("SELECT wallet_address FROM users WHERE user_id = ?", (user_id,))
+        current_wallet = c.fetchone()[0]
+        conn.close()
+        
+        wallet_display = current_wallet if current_wallet else "None Registered"
+        prompt_text = (
+            "⚙️ *SETTLEMENT WALLET MATRIX*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Current Routing Target: `{wallet_display}`\n\n"
+            "⚡ *HIGH SPEED RUNNING PROCESS RECOMMENDATION:*\n"
+            f"We strongly suggest using **{RECOMMENDED_WALLET}** to receive funds instantly.\n\n"
+            f"📥 [Download Trust Wallet App officially here]({WALLET_DOWNLOAD_LINK})\n\n"
+            "👉 *To update:* Reply directly with your active *BEP-20 (BSC) USDT* address:"
+        )
+        prompt = bot.send_message(user_id, prompt_text, parse_mode="Markdown", disable_web_page_preview=True)
+        bot.register_next_step_handler(prompt, save_wallet_routing)
+
+    elif call.data == "ui_withdraw":
+        try: bot.answer_callback_query(call.id)
+        except Exception: pass
+        conn = sqlite3.connect("earning_platform.db")
+        c = conn.cursor()
+        c.execute("SELECT balance, wallet_address FROM users WHERE user_id = ?", (user_id,))
+        balance, wallet = c.fetchone()
+        
+        if not wallet:
+            conn.close()
+            bot.send_message(user_id, "❌ *Action Required:* Link a wallet address first.", parse_mode="Markdown")
+            return
+            
+        if balance < MIN_WITHDRAWAL:
+            conn.close()
+            bot.send_message(user_id, f"❌ Minimum withdrawal target limit is `${MIN_WITHDRAWAL:.2f} USD`.", parse_mode="Markdown")
+            return
+            
+        c.execute("UPDATE users SET balance = 0.0 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        
+        admin_invoice_msg = (
+            "⚡ *NEW TRANSACTION REQUEST SUBMITTED*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 User ID     : `{user_id}`\n"
+            f"💰 Value Tiers : `${balance:.2f} USD`\n"
+            f"💳 Destination : `{wallet}`\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚙️ Status: *Ledger balance zeroed out. Ready for manual payment distribution.*"
+        )
+        
+        try:
+            bot.send_message(ADMIN_GROUP_CHAT_ID, admin_invoice_msg, parse_mode="Markdown")
+        except Exception as e:
+            print(f"⚠️ Network error forwarding transaction: {e}")
+            
+        client_receipt_card = (
+            "✅ *WITHDRAWAL INVOICE SUBMITTED FOR REVIEW*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Liquidation Value Recieved : `${balance:.2f} USD`\n"
+            f"Target Destination Wallet  : `{wallet}`\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⏳ *PROCESSING TIMELINE WINDOW:*\n"
+            f"• If you utilized **{RECOMMENDED_WALLET}**, your settlement balance will be credited within **1 Hour**!\n\n"
+            "• If you utilized any external exchange wallet address, accounting checks
