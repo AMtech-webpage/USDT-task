@@ -1,4 +1,23 @@
 import os
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# Call this at the start of your code
+keep_alive()
+import os
 import psycopg2
 import telebot
 from telebot import types
