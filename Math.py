@@ -298,7 +298,7 @@ def menu_navigation(message):
             "⚠️ *Recommended Action:*\n"
             "We highly request payouts to secure decentralized accounts. "
             f"Please download [Trust Wallet here]({TRUST_WALLET_URL}) if you don't have one.\n\n"
-            "👉 *To set or change your USDT wallet address, reply directly to this message with your address now.*"
+            "👉 *To set or change your USDT BEP20 wallet address, reply directly to this message with your USDT BEP20 wallet address now.*"
         )
         msg = bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
         bot.register_next_step_handler(msg, process_wallet_save)
