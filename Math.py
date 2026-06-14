@@ -10,15 +10,15 @@ from telebot.apihelper import ApiTelegramException
 # =====================================================================
 # 1. CONFIGURATION & CONSTANTS
 # =====================================================================
-# Updated with your new token
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8618388592:AAFRaEpzv9Ans816Thg0OF4p_DvrV1Y_j6w")
 REQUIRED_CHANNEL = "@legitupdateontelegram"
 ADMIN_PAYOUT_CHANNEL = "@USDTsettlemente"
 
 MIN_WITHDRAWAL = 2.0
 REF_REWARD = 0.2
+PROMO_REWARD = 0.50 # Reward for using the MUIZ promo code
 
-# Task configuration: times are in seconds
+# Task configuration
 YT_TASKS = [
     {"id": "yt_1", "title": "Watch YouTube Video 1", "url": "https://youtube.com/shorts/M4PF2V7TOqE", "reward": 0.1, "duration": 60},
     {"id": "yt_2", "title": "Watch YouTube Video 2", "url": "https://youtube.com/shorts/JfinwV1CFuc", "reward": 0.1, "duration": 60},
@@ -35,7 +35,7 @@ ALL_TASKS = YT_TASKS + APP_TASKS
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # =====================================================================
-# 2. DATABASE ENGINE (Thread-Safe Context Manager)
+# 2. DATABASE ENGINE
 # =====================================================================
 DB_NAME = "users.db"
 
@@ -50,6 +50,13 @@ def init_db():
                 referred_by INTEGER DEFAULT NULL
             )
         """)
+        
+        # Safely add the used_promo column if it doesn't exist yet
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN used_promo INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass # Column already exists
+
         c.execute("""
             CREATE TABLE IF NOT EXISTS user_tasks (
                 user_id INTEGER,
@@ -81,7 +88,7 @@ def db_fetch_all(query, params=()):
         return c.fetchall()
 
 # =====================================================================
-# 3. HTTP HEALTH SERVER (For Render)
+# 3. HTTP HEALTH SERVER
 # =====================================================================
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -99,18 +106,15 @@ def run_health_server():
 # 4. HELPER FUNCTIONS
 # =====================================================================
 def check_channel_membership(user_id):
-    """Verifies if the user is in the required channel."""
     try:
         member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)
         return member.status in ['member', 'administrator', 'creator']
     except ApiTelegramException:
-        # Bot might not be admin in the channel or user hasn't started the bot properly
         return False
     except Exception:
         return False
 
 def show_verification_gate(chat_id):
-    """Displays the mandatory channel join prompt."""
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("📢 Join Official Channel", url=f"https://t.me/{REQUIRED_CHANNEL.replace('@', '')}"))
     markup.add(InlineKeyboardButton("🔄 Verify Membership", callback_data="verify_membership"))
@@ -123,7 +127,6 @@ def show_verification_gate(chat_id):
     )
 
 def show_dashboard(chat_id, user_id):
-    """Renders the main user dashboard UI."""
     user_data = db_fetch_one("SELECT balance, wallet_address FROM users WHERE user_id = ?", (user_id,))
     if not user_data:
         return
@@ -149,6 +152,10 @@ def show_dashboard(chat_id, user_id):
         InlineKeyboardButton("💼 Set Wallet", callback_data="menu_wallet"),
         InlineKeyboardButton("👥 Referral Link", callback_data="menu_referral")
     )
+    # Added Promo Code Button
+    markup.add(
+        InlineKeyboardButton("🎁 Promo Code", callback_data="menu_promo")
+    )
 
     bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
 
@@ -165,7 +172,6 @@ def handle_start(message):
     if len(args) > 1 and args[1].isdigit():
         ref_id = int(args[1])
 
-    # Check if user exists safely
     user_exists = db_fetch_one("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
 
     if user_exists:
@@ -173,14 +179,12 @@ def handle_start(message):
             try:
                 bot.send_message(ref_id, "❌ REFERRAL FAILED: User already exists")
             except ApiTelegramException:
-                pass # Referrer might have blocked the bot
+                pass
     else:
-        # Process new user registration
         if ref_id == user_id:
             bot.send_message(chat_id, "❌ REFERRAL FAILED: You cannot refer yourself")
             db_execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
         elif ref_id:
-            # Verify referrer exists
             referrer_exists = db_fetch_one("SELECT user_id FROM users WHERE user_id = ?", (ref_id,))
             if referrer_exists:
                 db_execute("INSERT INTO users (user_id, referred_by) VALUES (?, ?)", (user_id, ref_id))
@@ -194,7 +198,6 @@ def handle_start(message):
         else:
             db_execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
 
-    # Channel verification gate
     if not check_channel_membership(user_id):
         show_verification_gate(chat_id)
     else:
@@ -208,7 +211,6 @@ def handle_callbacks(call):
     user_id = call.from_user.id
     chat_id = call.message.chat.id
 
-    # 1. Membership Verification
     if call.data == "verify_membership":
         if check_channel_membership(user_id):
             bot.answer_callback_query(call.id, "✅ Verification successful!")
@@ -218,12 +220,10 @@ def handle_callbacks(call):
             bot.answer_callback_query(call.id, "❌ You haven't joined the channel yet!", show_alert=True)
         return
 
-    # Security check: Must be verified for all other actions
     if not check_channel_membership(user_id):
         bot.answer_callback_query(call.id, "❌ You must join the channel first!", show_alert=True)
         return
 
-    # 2. Main Menu Routing
     if call.data == "menu_main":
         bot.delete_message(chat_id, call.message.message_id)
         show_dashboard(chat_id, user_id)
@@ -245,6 +245,12 @@ def handle_callbacks(call):
         msg = bot.edit_message_text(text, chat_id, call.message.message_id, parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_wallet_input)
 
+    # Promo Code Menu Trigger
+    elif call.data == "menu_promo":
+        text = "🎁 *PROMO CODE*\n\nPlease reply to this message with your promo code to claim free rewards!"
+        msg = bot.edit_message_text(text, chat_id, call.message.message_id, parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_promo_input)
+
     elif call.data == "menu_withdraw":
         user_data = db_fetch_one("SELECT balance, wallet_address FROM users WHERE user_id = ?", (user_id,))
         if not user_data:
@@ -260,7 +266,6 @@ def handle_callbacks(call):
             bot.answer_callback_query(call.id, f"❌ Minimum withdrawal is ${MIN_WITHDRAWAL:.2f}", show_alert=True)
             return
 
-        # Process Withdrawal
         db_execute("UPDATE users SET balance = 0.0 WHERE user_id = ?", (user_id,))
         
         admin_req = (
@@ -282,11 +287,9 @@ def handle_callbacks(call):
             call.message.message_id,
             parse_mode="Markdown"
         )
-        # Return to dashboard after 3 seconds
         time.sleep(3)
         show_dashboard(chat_id, user_id)
 
-    # 3. Tasks Menu
     elif call.data == "menu_tasks":
         markup = InlineKeyboardMarkup(row_width=1)
         
@@ -303,7 +306,6 @@ def handle_callbacks(call):
         markup.add(InlineKeyboardButton("⬅️ Back", callback_data="menu_main"))
         bot.edit_message_text("📋 *AVAILABLE TASKS*\n\nSelect a task below to start earning:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-    # 4. Task Execution Engine
     elif call.data.startswith("task_start_"):
         task_id = call.data.replace("task_start_", "")
         task = next((t for t in ALL_TASKS if t["id"] == task_id), None)
@@ -311,7 +313,6 @@ def handle_callbacks(call):
         if not task:
             return
 
-        # Record start time
         current_time = time.time()
         db_execute("""
             INSERT INTO user_tasks (user_id, task_id, start_time, is_completed) 
@@ -358,16 +359,13 @@ def handle_callbacks(call):
         elapsed_time = time.time() - start_time
         if elapsed_time < task["duration"]:
             remaining = int(task["duration"] - elapsed_time)
-            bot.answer_callback_query(call.id, f"⚠️ Verification Pending: Please wait {remaining} more seconds and ensure you completed the action.", show_alert=True)
+            bot.answer_callback_query(call.id, f"⚠️ Verification Pending: Please wait {remaining} more seconds.", show_alert=True)
             return
 
-        # Verification successful: Update records and reward user
         db_execute("UPDATE user_tasks SET is_completed = 1 WHERE user_id = ? AND task_id = ?", (user_id, task_id))
         db_execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (task["reward"], user_id))
         
         bot.answer_callback_query(call.id, f"🎉 Success! +${task['reward']:.2f} added to balance.", show_alert=True)
-        
-        # Route back to tasks menu implicitly via code repetition or calling the main handler
         bot.delete_message(chat_id, call.message.message_id)
         show_dashboard(chat_id, user_id)
 
@@ -375,25 +373,43 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id, "Task already completed.")
 
 # =====================================================================
-# 7. WALLET INPUT STATE HANDLER
+# 7. CHAT INPUT HANDLERS (Wallet & Promo Code)
 # =====================================================================
 def process_wallet_input(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     wallet_address = message.text.strip() if message.text else ""
 
-    # Check for empty or invalid length (common for crypto wallets)
     if len(wallet_address) < 10:
-        msg = bot.send_message(chat_id, "❌ *Invalid Wallet Address*\nAddress is too short or empty. Please try setting it again from the dashboard.", parse_mode="Markdown")
+        bot.send_message(chat_id, "❌ *Invalid Wallet Address*\nAddress is too short. Try setting it again.", parse_mode="Markdown")
         time.sleep(2)
         show_dashboard(chat_id, user_id)
         return
 
-    # Update database
     db_execute("UPDATE users SET wallet_address = ? WHERE user_id = ?", (wallet_address, user_id))
-    
     bot.send_message(chat_id, f"✅ *Wallet Updated Successfully*\n`{wallet_address}`", parse_mode="Markdown")
     time.sleep(1)
+    show_dashboard(chat_id, user_id)
+
+def process_promo_input(message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    promo_input = message.text.strip().lower() if message.text else ""
+
+    if promo_input == "muiz":
+        # Check if the user has already used a promo code
+        user_data = db_fetch_one("SELECT used_promo FROM users WHERE user_id = ?", (user_id,))
+        
+        if user_data and user_data[0] == 1:
+            bot.send_message(chat_id, "❌ You have already claimed this promo code!", parse_mode="Markdown")
+        else:
+            # Add reward and mark promo as used
+            db_execute("UPDATE users SET balance = balance + ?, used_promo = 1 WHERE user_id = ?", (PROMO_REWARD, user_id))
+            bot.send_message(chat_id, f"🎉 *Promo Code Accepted!*\n\nYou claimed the 'MUIZ' code and earned `${PROMO_REWARD:.2f}`!", parse_mode="Markdown")
+    else:
+        bot.send_message(chat_id, "❌ *Invalid Promo Code*\nThis code does not exist or has expired.", parse_mode="Markdown")
+        
+    time.sleep(2)
     show_dashboard(chat_id, user_id)
 
 # =====================================================================
@@ -407,5 +423,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_health_server, daemon=True).start()
     
     print("Starting Telegram Bot Polling Engine...")
-    # Using skip_pending=True to prevent flood of old requests on restart causing Error 409 conflicts
     bot.infinity_polling(skip_pending=True)
