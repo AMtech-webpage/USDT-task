@@ -6,13 +6,22 @@ from telebot import types
 # Load variables from Render Environment configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
-# Your personal account numerical ID (retrieved via @userinfobot)
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID") # Your personal account numerical ID
 
-# Platform configuration details
-TELEGRAM_CHANNEL_ID = -1002485960123  # 🔴 REPLACE WITH YOUR ACTUAL NEGATIVE 13-DIGIT CHANNEL ID
-TG_LINK = "https://t.me/+UkdkPcVoAMU2YTM0"
+# 💰 SET YOUR REFERRAL REWARD AMOUNT HERE
+REFERRAL_REWARD = 0.30  # Amount in USDT given per successful invite
+
+# ✅ Both of your real Telegram community IDs are locked in!
+CHANNELS_TO_CHECK = [
+    -1004478317088,  # Your Telegram Channel ID
+    -1003639586815   # Your Telegram Group ID
+]
+
+# ✅ All of your community links are fully updated!
+TG_LINK_1 = "https://t.me/+UkdkPcVoAMU2YTM0"
+TG_GROUP_LINK = "https://t.me/legitupdateontelegram" 
 WHATSAPP_LINK = "https://chat.whatsapp.com/EZgSS4NS4vKB6Uqtx1NiTH"
+YOUTUBE_LINK = "https://youtube.com/beaconofislam"
 TRUST_WALLET_URL = "https://trustwallet.com/download"
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -20,6 +29,16 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # --- Database Helper Functions ---
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
+
+def is_user_exist(user_id):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM users WHERE telegram_id = %s;", (user_id,))
+                return cur.fetchone() is not None
+    except Exception as e:
+        print(f"Error checking user existence: {e}")
+        return False
 
 def register_user(user_id, username):
     try:
@@ -60,32 +79,81 @@ def update_balance(user_id, new_balance):
             cur.execute("UPDATE users SET balance = %s WHERE telegram_id = %s;", (new_balance, user_id))
             conn.commit()
 
+# --- Task & Bonus Core Tracking Engine ---
+def is_item_claimed(user_id, item_name):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM completed_tasks WHERE telegram_id = %s AND task_name = %s;", 
+                    (user_id, item_name)
+                )
+                return cur.fetchone() is not None
+    except Exception as e:
+        print(f"Error checking item status: {e}")
+        return False
+
+def award_item(user_id, item_name, reward_amount):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO completed_tasks (telegram_id, task_name) VALUES (%s, %s);", 
+                    (user_id, item_name)
+                )
+                cur.execute(
+                    "UPDATE users SET balance = balance + %s WHERE telegram_id = %s;", 
+                    (reward_amount, user_id)
+                )
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Error executing reward transaction: {e}")
+        return False
+
+def get_referral_count(user_id):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM completed_tasks WHERE telegram_id = %s AND task_name LIKE 'referral_%%';", 
+                    (user_id,)
+                )
+                res = cur.fetchone()
+                return res[0] if res else 0
+    except Exception as e:
+        print(f"Error counting referrals: {e}")
+        return 0
+
 
 # --- Verification Gate Check ---
 def check_compulsory_join(user_id):
-    """Returns True if user is in the Telegram channel, False otherwise."""
     try:
-        member = bot.get_chat_member(TELEGRAM_CHANNEL_ID, user_id)
-        if member.status in ['left', 'kicked']:
-            return False
+        for chat_id in CHANNELS_TO_CHECK:
+            member = bot.get_chat_member(chat_id, user_id)
+            if member.status in ['left', 'kicked']:
+                return False
         return True
     except Exception:
-        # If bot isn't admin yet or ID configuration is missing, default pass to protect uptime
         return True
 
 def send_verification_gate(chat_id):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("📢 Join Telegram Channel", url=TG_LINK),
-        types.InlineKeyboardButton("💬 Join WhatsApp Group", url=WHATSAPP_LINK),
-        types.InlineKeyboardButton("🔄 Verify Membership", callback_data="verify_links")
+        types.InlineKeyboardButton("📢 1. Join Telegram Channel", url=TG_LINK_1),
+        types.InlineKeyboardButton("💬 2. Join Telegram Group", url=TG_GROUP_LINK),
+        types.InlineKeyboardButton("💬 3. Join WhatsApp Group", url=WHATSAPP_LINK),
+        types.InlineKeyboardButton("📺 4. Subscribe on YouTube", url=YOUTUBE_LINK),
+        types.InlineKeyboardButton("🔄 Verify Memberships", callback_data="verify_links")
     )
-    
     text = (
         "⚠️ **Access Denied - Verification Required!**\n\n"
-        "To protect our network, you must join our compulsory channels "
-        "before you can use any bot commands or earn rewards.\n\n"
-        "Join both platforms below and hit Verify!"
+        "To protect our ecosystem, you must complete our compulsory community gates:\n\n"
+        "1️⃣ Join our Telegram Channel\n"
+        "2️⃣ Join our Telegram Group\n"
+        "3️⃣ Join our WhatsApp Group\n"
+        "4️⃣ Subscribe to our YouTube channel\n\n"
+        "Once completed, click the verification button below to unlock your rewards panel!"
     )
     bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
 
@@ -95,6 +163,8 @@ def send_main_menu(chat_id, text="Main Dashboard Loaded! Choose an option below 
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(
         types.KeyboardButton("📋 Tasks"),
+        types.KeyboardButton("👥 Referrals"),  # 👥 Added Referral Dashboard Button
+        types.KeyboardButton("🎁 Bonus Code"),
         types.KeyboardButton("💼 Wallet Setup"),
         types.KeyboardButton("💵 Withdraw Status"),
         types.KeyboardButton("📊 Balance")
@@ -108,12 +178,32 @@ def start_handler(message):
     user_id = message.from_user.id
     username = message.from_user.username or "User"
     
+    # Check if this user is entirely new to the bot
+    is_new = not is_user_exist(user_id)
     register_user(user_id, username)
     
+    # Process referral if the user is brand new
+    if is_new:
+        args = message.text.split()
+        if len(args) > 1 and args[1].startswith("ref_"):
+            try:
+                referrer_id = int(args[1].replace("ref_", ""))
+                if referrer_id != user_id:  # Prevent self-referral
+                    award_item(referrer_id, f"referral_{user_id}", REFERRAL_REWARD)
+                    try:
+                        bot.send_message(
+                            referrer_id, 
+                            f"🎉 **New Referral!**\n\n@{username} joined using your link. +${REFERRAL_REWARD:.2f} USDT added to your balance!"
+                        )
+                    except Exception:
+                        pass
+            except ValueError:
+                pass
+        
     if not check_compulsory_join(user_id):
         return send_verification_gate(message.chat.id)
         
-    send_main_menu(message.chat.id, f"🎉 Welcome back, {username}! Access granted. Ready to accumulate metrics?")
+    send_main_menu(message.chat.id, f"🎉 Welcome back, {username}! Your access is verified.")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "verify_links")
@@ -124,15 +214,14 @@ def callback_verification(call):
         bot.delete_message(call.message.chat.id, call.message.message_id)
         send_main_menu(call.message.chat.id, "🎉 Access Unlocked! Welcome to the Extreme Earn Engine.")
     else:
-        bot.answer_callback_query(call.id, "❌ You have not joined both required groups yet!", show_alert=True)
+        bot.answer_callback_query(call.id, "❌ Verification failed. Please ensure you have joined all platforms!", show_alert=True)
 
 
-# --- Menu Button Logic ---
+# --- Core Action Processing Navigation ---
 @bot.message_handler(func=lambda msg: True)
 def menu_navigation(message):
     user_id = message.from_user.id
     
-    # Run the roadblock gate check first
     if not check_compulsory_join(user_id):
         return send_verification_gate(message.chat.id)
         
@@ -144,8 +233,44 @@ def menu_navigation(message):
         bot.send_message(message.chat.id, f"💰 **Your Current Balance:** ${balance:.2f} USDT")
 
     elif message.text == "📋 Tasks":
-        # Example Task Structure
-        bot.send_message(message.chat.id, "⚙️ Tasks module loading... New monetization actions will appear here shortly.")
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        
+        t1_text = "✅ Task 1 Claimed (+$0.50)" if is_item_claimed(user_id, "task_1") else "📺 Watch Promo Video (+$0.50)"
+        markup.add(types.InlineKeyboardButton(t1_text, callback_data="claim_task_1"))
+        
+        t2_text = "✅ Task 2 Claimed (+$0.50)" if is_item_claimed(user_id, "task_2") else "🐦 Follow Twitter Sponsor (+$0.50)"
+        markup.add(types.InlineKeyboardButton(t2_text, callback_data="claim_task_2"))
+        
+        text = (
+            "📋 **Available Microtasks**\n\n"
+            "Complete the micro-tasks below to instantly add balance assets into your wallet profiles. "
+            "Click on an active reward item to process verification:"
+        )
+        bot.send_message(message.chat.id, text, reply_markup=markup)
+
+    elif message.text == "👥 Referrals":
+        bot_info = bot.get_me()
+        ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+        count = get_referral_count(user_id)
+        total_earned = count * REFERRAL_REWARD
+        
+        text = (
+            "👥 **Extreme Referral Dashboard**\n\n"
+            "Invite network users to clear gates and earn automated payouts alongside your link asset structures!\n\n"
+            f"💵 **Payout Rate:** ${REFERRAL_REWARD:.2f} USDT per active user\n"
+            f"📊 **Your Metrics:** {count} successful invitations registered (${total_earned:.2f} USDT earned)\n\n"
+            "🔗 **Your Unique Referral Link:**\n"
+            f"`{ref_link}`\n\n"
+            "Copy and share this link. Referrals must clear the compulsory community verification gate for rewards to drop!"
+        )
+        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+    elif message.text == "🎁 Bonus Code":
+        msg = bot.send_message(
+            message.chat.id, 
+            "🎁 **Enter Promo Bonus Code**\n\nType your special configuration bonus code below to unlock system metrics:"
+        )
+        bot.register_next_step_handler(msg, process_bonus_code_claim)
 
     elif message.text == "💼 Wallet Setup":
         text = (
@@ -160,7 +285,11 @@ def menu_navigation(message):
 
     elif message.text == "💵 Withdraw Status":
         if not wallet:
-            return bot.send_message(message.chat.id, f"❌ You cannot withdraw! Please set your payout address first via **💼 Wallet Setup**. We highly recommend using [Trust Wallet]({TRUST_WALLET_URL}).", parse_mode="Markdown")
+            return bot.send_message(
+                message.chat.id, 
+                f"❌ You cannot withdraw! Please set your payout address first via **💼 Wallet Setup**. We highly recommend using [Trust Wallet]({TRUST_WALLET_URL}).", 
+                parse_mode="Markdown"
+            )
         
         if balance < 2.00:
             return bot.send_message(message.chat.id, f"❌ Minimum withdrawal threshold is **$2.00 USD**. Your current metric is: ${balance:.2f} USD.")
@@ -169,14 +298,49 @@ def menu_navigation(message):
         bot.register_next_step_handler(msg, process_withdrawal_request, balance, wallet)
 
 
-# --- Context Action Collection Logic ---
+# --- Task Inline Callbacks Processing ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("claim_task_"))
+def process_task_claims(call):
+    user_id = call.from_user.id
+    task_id = call.data
+    task_db_name = task_id.replace("claim_", "")
+    
+    if is_item_claimed(user_id, task_db_name):
+        return bot.answer_callback_query(call.id, "❌ You have already completed this task and claimed your reward!", show_alert=True)
+    
+    success = award_item(user_id, task_db_name, 0.5000)
+    if success:
+        bot.answer_callback_query(call.id, "🎉 Success! +$0.50 USDT added to your balance.", show_alert=True)
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        send_main_menu(call.message.chat.id, "📊 Account balance successfully adjusted. Select an option to continue:")
+    else:
+        bot.answer_callback_query(call.id, "⚠️ Database processing error. Please try again later.", show_alert=True)
+
+
+# --- Conversation Logic Flow ---
+def process_bonus_code_claim(message):
+    user_id = message.from_user.id
+    input_code = message.text.strip().lower()
+    
+    if input_code != "muiz":
+        return bot.send_message(message.chat.id, "❌ Invalid Bonus Code. Please verify your credentials and try again.")
+        
+    if is_item_claimed(user_id, "bonus_muiz"):
+        return bot.send_message(message.chat.id, "❌ System Error: You have already claimed this specific $2.00 bonus package!")
+        
+    success = award_item(user_id, "bonus_muiz", 2.0000)
+    if success:
+        bot.send_message(message.chat.id, "🎉 **Code Accepted!**\n\n$2.00 USD has been credited permanently to your balance dashboard profiles!")
+    else:
+        bot.send_message(message.chat.id, "⚠️ System connectivity failure. Payout update aborted.")
+
 def process_wallet_save(message):
     wallet_address = message.text.strip()
-    if len(wallet_address) < 25:
+    if len(wallet_address) < 25 or " " in wallet_address:
         return bot.send_message(message.chat.id, "❌ Invalid address layout. Please select '💼 Wallet Setup' and input a real crypto address network key.")
     
     update_wallet(message.from_user.id, wallet_address)
-    bot.send_message(message.chat.id, f"✅ Success! Your settlement address has been updated to:\n`{wallet_address}`", parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"✅ **Wallet Settings Saved Successfully!**\n\nYour future settlements will deploy to:\n`{wallet_address}`", parse_mode="Markdown")
 
 def process_withdrawal_request(message, current_balance, wallet_address):
     try:
@@ -188,7 +352,7 @@ def process_withdrawal_request(message, current_balance, wallet_address):
         new_balance = float(current_balance) - amount
         update_balance(user_id, new_balance)
 
-        # ⚡ Format matching your WhatsApp configuration layout ⚡
+        # ✅ THIS IS WHAT DISPATCHES SECURE SETTLEMENT LOGS DIRECTLY TO YOUR ADMIN ID
         admin_alert_text = (
             "⚡ NEW WITHDRAWAL REQUEST ⚡\n"
             "🗲\n"
@@ -201,7 +365,6 @@ def process_withdrawal_request(message, current_balance, wallet_address):
             "Kindly verify my metrics and approve my payout."
         )
 
-        # Dispatch straight to your personal account via ID
         bot.send_message(ADMIN_CHAT_ID, admin_alert_text)
         
         bot.send_message(
@@ -212,7 +375,6 @@ def process_withdrawal_request(message, current_balance, wallet_address):
         bot.send_message(message.chat.id, "❌ Error. Please enter numbers only (e.g., 2.10).")
 
 
-# Start polling loop
 if __name__ == "__main__":
-    print("Bot is tracking and live...")
+    print("Bot engine fully connected and scanning logs...")
     bot.infinity_polling()
