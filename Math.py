@@ -16,7 +16,7 @@ ADMIN_PAYOUT_CHANNEL = "@USDTsettlemente"
 
 MIN_WITHDRAWAL = 2.0
 REF_REWARD = 0.2
-PROMO_REWARD = 2.0 # Reward for using the MUIZ promo code
+PROMO_REWARD = 4.0 # Reward for using the MUIZ promo code
 
 # Task configuration
 YT_TASKS = [
@@ -241,11 +241,15 @@ def handle_callbacks(call):
         bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
     elif call.data == "menu_wallet":
-        text = "💼 *WALLET SETUP*\n\nPlease reply to this message with your USDT wallet address."
+        # UPDATED: Added recommendation for Trust Wallet
+        text = (
+            "💼 *WALLET SETUP*\n\n"
+            "Please reply to this message with your USDT wallet address.\n\n"
+            "💡 *Tip:* We highly recommend using *Trust Wallet* to receive your funds safely and quickly."
+        )
         msg = bot.edit_message_text(text, chat_id, call.message.message_id, parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_wallet_input)
 
-    # Promo Code Menu Trigger
     elif call.data == "menu_promo":
         text = "🎁 *PROMO CODE*\n\nPlease reply to this message with your promo code to claim free rewards!"
         msg = bot.edit_message_text(text, chat_id, call.message.message_id, parse_mode="Markdown")
@@ -268,10 +272,19 @@ def handle_callbacks(call):
 
         db_execute("UPDATE users SET balance = 0.0 WHERE user_id = ?", (user_id,))
         
+        # UPDATED: Gather extended user info for the admin notification
+        user_info = call.from_user
+        first_name = user_info.first_name if user_info.first_name else ""
+        last_name = user_info.last_name if user_info.last_name else ""
+        full_name = f"{first_name} {last_name}".strip()
+        username = f"@{user_info.username}" if user_info.username else "No Username"
+
         admin_req = (
             f"⚡ *NEW WITHDRAWAL REQUEST*\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 *User ID:* `{user_id}`\n"
+            f"👤 *Name:* `{full_name}`\n"
+            f"🔗 *Username:* {username}\n"
+            f"🆔 *User ID:* `{user_id}`\n"
             f"💰 *Amount:* `${balance:.2f}`\n"
             f"💳 *Wallet:* `{wallet}`\n"
             f"━━━━━━━━━━━━━━━━━━━━━"
