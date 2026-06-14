@@ -50,7 +50,7 @@ CHANNELS_TO_CHECK = [
 TG_LINK_1 = "https://t.me/+UkdkPcVoAMU2YTM0"
 TG_GROUP_LINK = "https://t.me/legitupdateontelegram" 
 WHATSAPP_LINK = "https://chat.whatsapp.com/EZgSS4NS4vKB6Uqtx1NiTH"
-YOUTUBE_LINK = "https://youtube.com/beaconofislam"
+YOUTUBE_LINK = "https://youtube.com/beaconofslam"
 TRUST_WALLET_URL = "https://trustwallet.com/download"
 
 bot = telebot.TeleBot(BOT_TOKEN)
