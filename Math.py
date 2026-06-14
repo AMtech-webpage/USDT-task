@@ -16,7 +16,7 @@ ADMIN_PAYOUT_CHANNEL = "@USDTsettlemente"
 
 MIN_WITHDRAWAL = 2.0
 REF_REWARD = 0.2
-PROMO_REWARD = 0.50 # Reward for using the MUIZ promo code
+PROMO_REWARD = 2.0 # Reward for using the MUIZ promo code
 
 # Task configuration
 YT_TASKS = [
