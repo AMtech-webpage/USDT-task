@@ -1,4 +1,4 @@
-import os
+def os
 from flask import Flask
 from threading import Thread
 
@@ -70,23 +70,24 @@ def is_user_exist(user_id):
         return False
 
 def register_user(user_id, username):
+def register_user(user_id, username):
     try:
-            with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            # Your database queries go here...
-
-         cur.execute(
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Your database queries go here
+                cur.execute(
                     """
                     INSERT INTO users (telegram_id, username, balance)
-                    VALUES (%s, %s, 0.0000)
-                    ON CONFLICT (telegram_id) DO UPDATE 
-                    SET username = EXCLUDED.username;
+                    VALUES (%s, %s, 0.00)
+                    ON CONFLICT (telegram_id)
+                    DO UPDATE SET username = EXCLUDED.username;
                     """,
                     (user_id, username)
                 )
                 conn.commit()
     except Exception as e:
         print(f"Database registration error: {e}")
+
 
 def get_user_data(user_id):
     try:
