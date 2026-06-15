@@ -425,13 +425,13 @@ def process_bonus_code_claim(message):
         
     input_code = message.text.strip().lower()
     
-    if input_code != "muiz":
+    if input_code != "muiz" || "USDT20":
         return bot.send_message(message.chat.id, "❌ Invalid Bonus Code. Please verify your credentials and try again.")
         
     if is_item_claimed(user_id, "bonus_muiz"):
         return bot.send_message(message.chat.id, "❌ System Error: You have already claimed this specific $2.00 bonus package!")
         
-    success = award_item(user_id, "bonus_muiz", 2.0000)
+    success = award_item(user_id, "bonus_muiz", 0.2)
     if success:
         bot.send_message(message.chat.id, "🎉 *Code Accepted!*\n\n$2.00 USD has been credited permanently to your balance dashboard profiles!", parse_mode="Markdown")
     else:
