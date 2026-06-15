@@ -71,8 +71,11 @@ def is_user_exist(user_id):
 
 def register_user(user_id, username):
     try:
-        with get_db_cowith conn.cursor() as cur:
-                cur.execute(
+            with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Your database queries go here...
+
+         cur.execute(
                     """
                     INSERT INTO users (telegram_id, username, balance)
                     VALUES (%s, %s, 0.0000)
