@@ -423,15 +423,20 @@ def process_bonus_code_claim(message):
     if not check_compulsory_join(user_id):
         return send_verification_gate(message.chat.id)
         
-    input_code = message.text.strip().lower()
+        input_code = message.text.strip().lower()
     
-    if input_code != "usdt" or "usdt20":
+    # Check if the entered code is valid
+    if input_code not in ["muiz", "usdt20"]:
         return bot.send_message(message.chat.id, "❌ Invalid Bonus Code. Please verify your credentials and try again.")
         
-    if is_item_claimed(user_id, "bonus_muiz"):
-        return bot.send_message(message.chat.id, "❌ System Error: You have already claimed this specific $2.00 bonus package!")
+    # Dynamically track the code used (e.g., "bonus_muiz" or "bonus_usdt20")
+    bonus_item_name = f"bonus_{input_code}"
+    
+    if is_item_claimed(user_id, bonus_item_name):
+        return bot.send_message(message.chat.id, "❌ You have already claimed this bonus code!")
         
-    success = award_item(user_id, "bonus_muiz", 0.15)
+    success = award_item(user_id, bonus_item_name)
+
     if success:
         bot.send_message(message.chat.id, "🎉 *Code Accepted!*\n\n$2.00 USD has been credited permanently to your balance dashboard profiles!", parse_mode="Markdown")
     else:
