@@ -423,22 +423,35 @@ def process_bonus_code_claim(message):
     if not check_compulsory_join(user_id):
         return send_verification_gate(message.chat.id)
         
-        input_code = message.text.strip().lower()
+    # 1. Define your codes and their exact cash payout amounts here
+    BONUS_CONFIG = {
+        "muiz": 2.00,      # Gives $2.00 USDT
+        "usdt20": 0.15     # Change 5.00 to whatever amount you want for this code!
+    }
     
-    # Check if the entered code is valid
-    if input_code not in ["muiz", "usdt20"]:
+    input_code = message.text.strip().lower()
+    
+    # Check if the entered code exists in our configuration
+    if input_code not in BONUS_CONFIG:
         return bot.send_message(message.chat.id, "❌ Invalid Bonus Code. Please verify your credentials and try again.")
         
-    # Dynamically track the code used (e.g., "bonus_muiz" or "bonus_usdt20")
+    # 2. Extract the specific item name and reward value dynamically
     bonus_item_name = f"bonus_{input_code}"
+    reward_amount = BONUS_CONFIG[input_code]
     
     if is_item_claimed(user_id, bonus_item_name):
         return bot.send_message(message.chat.id, "❌ You have already claimed this bonus code!")
         
-    success = award_item(user_id, bonus_item_name)
-
+    # 3. Pass all 3 parameters (including reward_amount) to your database function
+    success = award_item(user_id, bonus_item_name, reward_amount)
+    
     if success:
-        bot.send_message(message.chat.id, "🎉 *Code Accepted!*\n\n$2.00 USD has been credited permanently to your balance dashboard profiles!", parse_mode="Markdown")
+        bot.send_message(
+            message.chat.id, 
+            f"🎉 *Code Accepted!*\n\n"
+            f"${reward_amount:.2f} USDT has been credited permanently to your balance dashboard profiles!",
+            parse_mode="Markdown"
+        )
     else:
         bot.send_message(message.chat.id, "⚠️ System connectivity failure. Payout update aborted.")
 
