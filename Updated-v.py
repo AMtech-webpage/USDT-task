@@ -69,7 +69,7 @@ def is_user_exist(user_id):
         print(f"Error checking user existence: {e}")
         return False
 
-def register_user(user_id, username):
+
 def register_user(user_id, username):
     try:
         with get_db_connection() as conn:
