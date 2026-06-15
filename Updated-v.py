@@ -49,7 +49,7 @@ CHANNELS_TO_CHECK = [
 # ✅ Community URL destinations
 TG_LINK_1 = "https://t.me/+UkdkPcVoAMU2YTM0"
 TG_GROUP_LINK = "https://t.me/legitupdateontelegram" 
-WHATSAPP_LINK = "https://chat.whatsapp.com/EZgSS4NS4vKB6Uqtx1NiTH"
+WHATSAPP_LINK = "https://whatsapp.com/channel/0029VbDKfJQHFxPAOJsTfE3y"
 YOUTUBE_LINK = "https://youtube.com/beaconofslam"
 TRUST_WALLET_URL = "https://trustwallet.com/download"
 
@@ -71,8 +71,7 @@ def is_user_exist(user_id):
 
 def register_user(user_id, username):
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
+        with get_db_cowith conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO users (telegram_id, username, balance)
@@ -176,9 +175,9 @@ def check_compulsory_join(user_id):
 def send_verification_gate(chat_id):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("📢 1. Join Telegram Channel", url=TG_LINK_1),
-        types.InlineKeyboardButton("💬 2. Join Telegram Group", url=TG_GROUP_LINK),
-        types.InlineKeyboardButton("💬 3. Join WhatsApp Group", url=WHATSAPP_LINK),
+        types.InlineKeyboardButton("📢 1. Join Telegram Group", url=TG_LINK_1),
+        types.InlineKeyboardButton("💬 2. Join Telegram Channel", url=TG_GROUP_LINK),
+        types.InlineKeyboardButton("💬 3. Join WhatsApp Channel", url=WHATSAPP_LINK),
         types.InlineKeyboardButton("📺 4. Subscribe on YouTube", url=YOUTUBE_LINK),
         types.InlineKeyboardButton("🔄 Verify Memberships", callback_data="verify_links")
     )
